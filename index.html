@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#6c8c58" />
+  <meta name="description" content="我的飲食管家：拍照估算營養素、追蹤飲水與每日飲食。" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="icon.svg" />
+  <link rel="stylesheet" href="styles.css" />
+  <title>我的飲食管家</title>
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <div class="brand">我的飲食管家</div>
+      <div class="date" id="todayLabel"></div>
+    </div>
+    <button class="icon-btn" id="settingsBtn" aria-label="設定">⚙️</button>
+  </header>
+
+  <main class="app-shell">
+    <section class="hero-card">
+      <div class="hero-copy">
+        <span class="eyebrow">今日飲食</span>
+        <h1 id="calorieHeadline">先記錄第一餐吧</h1>
+        <p id="dailyAdvice" class="muted">拍照或手動加入食物，APP 會幫你整理今天的營養。</p>
+      </div>
+      <div class="ring" id="calorieRing"><div><strong id="calorieValue">0</strong><span>kcal</span></div></div>
+    </section>
+
+    <section class="stats-grid">
+      <div class="stat-card"><span>蛋白質</span><strong id="proteinTotal">0g</strong><em id="proteinGoalLabel">/ 0g</em><div class="progress"><i id="proteinBar"></i></div></div>
+      <div class="stat-card"><span>碳水化合物</span><strong id="carbTotal">0g</strong><em id="carbGoalLabel">/ 0g</em><div class="progress"><i id="carbBar"></i></div></div>
+      <div class="stat-card"><span>脂肪</span><strong id="fatTotal">0g</strong><em id="fatGoalLabel">/ 0g</em><div class="progress"><i id="fatBar"></i></div></div>
+      <div class="stat-card"><span>今日總食物</span><strong id="foodCount">0</strong><em>份</em><div class="mini-note">可持續新增</div></div>
+    </section>
+
+    <section class="water-card">
+      <div class="section-head"><div><span class="eyebrow">水分</span><h2><span id="waterTotal">0</span> / <span id="waterGoal">2000</span> ml</h2></div><span class="water-percent" id="waterPercent">0%</span></div>
+      <div class="water-track"><i id="waterBar"></i></div>
+      <div class="water-actions">
+        <button class="secondary" data-water="250">＋ 250 ml</button>
+        <button class="secondary" data-water="500">＋ 500 ml</button>
+        <button class="ghost" id="waterUndo">↩ 減少 250 ml</button>
+      </div>
+    </section>
+
+    <section class="photo-card">
+      <div class="photo-icon">📸</div>
+      <div class="photo-text"><h2>拍照估算營養</h2><p>上傳餐點照片，先由 APP 估算熱量、蛋白質、碳水與脂肪，再確認份量。</p></div>
+      <input type="file" id="photoInput" accept="image/*" capture="environment" hidden />
+      <button class="primary" id="photoBtn">拍照／上傳</button>
+      <div id="photoPreviewWrap" class="preview-wrap hidden"><img id="photoPreview" alt="餐點照片預覽"/><div><b id="photoResultTitle">分析完成</b><p id="photoResultText">請確認估算結果後加入今日飲食。</p></div></div>
+    </section>
+
+    <section>
+      <div class="section-head"><div><span class="eyebrow">今天吃了什麼</span><h2>飲食紀錄</h2></div><button class="small-link" id="addFoodBtn">＋ 手動新增</button></div>
+      <div id="foodList" class="food-list"></div>
+    </section>
+
+    <section class="suggestions-card">
+      <div class="section-head"><div><span class="eyebrow">智慧提醒</span><h2>今天的建議</h2></div><span class="badge" id="suggestionBadge">待記錄</span></div>
+      <div id="suggestions" class="suggestions"></div>
+    </section>
+
+    <section class="tip-card"><strong>📌 估算說明</strong><p>拍照營養數值屬於估算，不等同營養標示。建議確認食材與份量後再保存；包裝食品可優先輸入標示數值。</p></section>
+  </main>
+
+  <nav class="bottom-nav">
+    <button class="active"><span>⌂</span>今日</button>
+    <button id="historyBtn"><span>◷</span>紀錄</button>
+    <button id="profileBtn"><span>◎</span>目標</button>
+  </nav>
+
+  <div class="modal hidden" id="modal">
+    <div class="sheet">
+      <div class="sheet-head"><h3 id="modalTitle">新增食物</h3><button class="icon-btn" id="closeModal">✕</button></div>
+      <form id="foodForm">
+        <label>食物名稱<input id="foodName" required placeholder="例如：雞胸肉便當" /></label>
+        <div class="form-grid"><label>熱量 kcal<input id="foodCalories" type="number" min="0" value="400" required /></label><label>蛋白質 g<input id="foodProtein" type="number" min="0" value="30" required /></label></div>
+        <div class="form-grid"><label>碳水 g<input id="foodCarbs" type="number" min="0" value="45" required /></label><label>脂肪 g<input id="foodFat" type="number" min="0" value="12" required /></label></div>
+        <label>份量／備註<input id="foodNote" placeholder="例如：1 份、少飯、醬汁另放" /></label>
+        <button class="primary full" type="submit">加入今日紀錄</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal hidden" id="settingsModal">
+    <div class="sheet">
+      <div class="sheet-head"><h3>每日目標</h3><button class="icon-btn" id="closeSettings">✕</button></div>
+      <form id="settingsForm">
+        <div class="form-grid"><label>熱量 kcal<input id="goalCalories" type="number" min="500" value="1800" required /></label><label>蛋白質 g<input id="goalProtein" type="number" min="1" value="100" required /></label></div>
+        <div class="form-grid"><label>碳水 g<input id="goalCarbs" type="number" min="1" value="200" required /></label><label>脂肪 g<input id="goalFat" type="number" min="1" value="60" required /></label></div>
+        <label>每日飲水 ml<input id="goalWater" type="number" min="500" value="2000" required /></label>
+        <button class="primary full" type="submit">儲存目標</button>
+      </form>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
