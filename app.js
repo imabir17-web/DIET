@@ -1,43 +1,47 @@
-const KEY='dietApp_v1';
-const defaultState={foods:[],water:0,goals:{calories:1800,protein:100,carbs:200,fat:60,water:2000}};
+const KEY='dietApp_v2';
+const defaultState={
+  foods:[],water:0,
+  profile:{name:'我',sex:'female',age:31,height:156,weight:70,activity:'moderate',goal:'lose',weeklyStrength:2,weeklyCardio:5,cardioMinutes:60},
+  goals:{calories:1800,protein:100,carbs:200,fat:60,water:2000},
+  couple:{enabled:false,inviteCode:'',partnerName:'另一半',partnerState:null}
+};
 let state=load();
-function load(){try{return Object.assign({},defaultState,JSON.parse(localStorage.getItem(KEY)||'null'),{goals:{...defaultState.goals,...(JSON.parse(localStorage.getItem(KEY)||'null')?.goals||{})}})}catch{return structuredClone(defaultState)}}
+function deepClone(x){return JSON.parse(JSON.stringify(x));}
+function load(){try{const raw=JSON.parse(localStorage.getItem(KEY)||'null');return merge(deepClone(defaultState),raw||{});}catch{return deepClone(defaultState)}}
+function merge(base,src){if(!src)return base;Object.keys(src).forEach(k=>{if(src[k]&&typeof src[k]==='object'&&!Array.isArray(src[k])&&base[k]&&typeof base[k]==='object')base[k]=merge(base[k],src[k]);else base[k]=src[k]});return base}
 function save(){localStorage.setItem(KEY,JSON.stringify(state));render()}
 function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
-function totals(){return state.foods.reduce((a,f)=>({calories:a.calories+f.calories,protein:a.protein+f.protein,carbs:a.carbs+f.carbs,fat:a.fat+f.fat}),{calories:0,protein:0,carbs:0,fat:0})}
-function pct(v,g){return Math.min(100,Math.round(v/g*100));}
+function totals(foods=state.foods){return foods.reduce((a,f)=>({calories:a.calories+f.calories,protein:a.protein+f.protein,carbs:a.carbs+f.carbs,fat:a.fat+f.fat}),{calories:0,protein:0,carbs:0,fat:0})}
+function pct(v,g){return g?Math.min(100,Math.round(v/g*100)):0;}
+function activityFactor(p){return {sedentary:1.2,light:1.375,moderate:1.55,active:1.725,veryActive:1.9}[p.activity]||1.55}
+function calcTDEE(p){const bmr=p.sex==='male'?(10*p.weight+6.25*p.height-5*p.age+5):(10*p.weight+6.25*p.height-5*p.age-161);const tdee=bmr*activityFactor(p);const goalDelta=p.goal==='lose'?-400:p.goal==='gain'?300:0;return {bmr:Math.round(bmr),tdee:Math.round(tdee),target:Math.max(1200,Math.round(tdee+goalDelta))}}
+function recommendedMacros(tdee,p){const calories=Math.max(1200,tdee.target), protein=Math.round(p.weight*(p.goal==='lose'?1.6:1.4));const fat=Math.round((calories*0.28)/9);const carbs=Math.max(1,Math.round((calories-protein*4-fat*9)/4));return {calories,protein,carbs,fat,water:Math.round(Math.max(1800,p.weight*30))}}
 function render(){
- const t=totals(),g=state.goals;
+ const t=totals(),g=state.goals,p=state.profile,calc=calcTDEE(p);
  document.getElementById('todayLabel').textContent=new Date().toLocaleDateString('zh-TW',{year:'numeric',month:'long',day:'numeric',weekday:'long'});
- document.getElementById('calorieValue').textContent=Math.round(t.calories);
- document.getElementById('calorieHeadline').textContent=t.calories?`今天已攝取 ${Math.round(t.calories)} kcal`:'先記錄第一餐吧';
- document.getElementById('proteinTotal').textContent=Math.round(t.protein)+'g'; document.getElementById('proteinGoalLabel').textContent=`/ ${g.protein}g`;
- document.getElementById('carbTotal').textContent=Math.round(t.carbs)+'g'; document.getElementById('carbGoalLabel').textContent=`/ ${g.carbs}g`;
- document.getElementById('fatTotal').textContent=Math.round(t.fat)+'g'; document.getElementById('fatGoalLabel').textContent=`/ ${g.fat}g`;
+ document.getElementById('calorieValue').textContent=Math.round(t.calories); document.getElementById('calorieHeadline').textContent=t.calories?`今天已攝取 ${Math.round(t.calories)} kcal`:'先記錄第一餐吧';
+ document.getElementById('dailyAdvice').textContent=`TDEE 約 ${calc.tdee} kcal；今日建議攝取 ${g.calories} kcal。`;
+ [['protein',t.protein,g.protein],['carb',t.carbs,g.carbs],['fat',t.fat,g.fat]].forEach(([k,v,goal])=>{document.getElementById(k+'Total').textContent=Math.round(v)+'g';document.getElementById(k+'GoalLabel').textContent=`/ ${goal}g`;document.getElementById(k+'Bar').style.width=pct(v,goal)+'%'})
  document.getElementById('foodCount').textContent=state.foods.length;
- document.getElementById('proteinBar').style.width=pct(t.protein,g.protein)+'%'; document.getElementById('carbBar').style.width=pct(t.carbs,g.carbs)+'%'; document.getElementById('fatBar').style.width=pct(t.fat,g.fat)+'%';
- const cp=Math.min(100,Math.round(t.calories/g.calories*100)); document.getElementById('calorieRing').style.background=`conic-gradient(var(--accent) ${cp*3.6}deg,#d9e4cf ${cp*3.6}deg)`;
- document.getElementById('dailyAdvice').textContent=adviceText(t,g);
- document.getElementById('waterTotal').textContent=state.water; document.getElementById('waterGoal').textContent=g.water; const wp=Math.min(100,Math.round(state.water/g.water*100)); document.getElementById('waterPercent').textContent=wp+'%'; document.getElementById('waterBar').style.width=wp+'%';
- const list=document.getElementById('foodList'); list.innerHTML=state.foods.length?state.foods.map(f=>`<div class="food-item"><div><div class="food-name">${esc(f.name)}</div><div class="food-note">${esc(f.note||'')}</div></div><div class="food-macros">${Math.round(f.calories)} kcal<br>P ${Math.round(f.protein)}g · C ${Math.round(f.carbs)}g · F ${Math.round(f.fat)}g</div><button class="delete-btn" data-delete="${f.id}">刪除</button></div>`).join(''):`<div class="food-item"><div><div class="food-name">還沒有飲食紀錄</div><div class="food-note">使用上方拍照或手動新增。</div></div></div>`;
+ const cp=pct(t.calories,g.calories); document.getElementById('calorieRing').style.background=`conic-gradient(var(--accent) ${cp*3.6}deg,#d9e4cf ${cp*3.6}deg)`;
+ document.getElementById('waterTotal').textContent=state.water; document.getElementById('waterGoal').textContent=g.water; document.getElementById('waterPercent').textContent=pct(state.water,g.water)+'%';document.getElementById('waterBar').style.width=pct(state.water,g.water)+'%';
+ const list=document.getElementById('foodList');list.innerHTML=state.foods.length?state.foods.map(f=>`<div class="food-item"><div><div class="food-name">${esc(f.name)}</div><div class="food-note">${esc(f.note||'')}</div></div><div class="food-macros">${Math.round(f.calories)} kcal<br>P ${Math.round(f.protein)}g · C ${Math.round(f.carbs)}g · F ${Math.round(f.fat)}g</div><button class="delete-btn" data-delete="${f.id}">刪除</button></div>`).join(''):`<div class="food-item"><div><div class="food-name">還沒有飲食紀錄</div><div class="food-note">使用拍照或手動新增。</div></div></div>`;
  document.querySelectorAll('[data-delete]').forEach(b=>b.onclick=()=>{state.foods=state.foods.filter(x=>x.id!==b.dataset.delete);save()});
- renderSuggestions(t,g);
+ renderSuggestions(t,g,calc); renderProfile(calc); renderCouple();
 }
-function adviceText(t,g){if(!state.foods.length)return'拍照或手動加入食物，APP 會幫你整理今天的營養。';const rem=Math.max(0,g.calories-t.calories);return rem<=0?'今天的熱量已達到設定目標，可以優先選擇蔬菜、蛋白質與無糖飲品。':`距離今日熱量目標約 ${Math.round(rem)} kcal；接下來可優先補足蛋白質與蔬菜。`}
-function renderSuggestions(t,g){const box=document.getElementById('suggestions');const arr=[];if(t.protein<g.protein*.75)arr.push('🥚 蛋白質目前偏低，下一餐可以加入雞胸肉、魚、蛋、豆腐或希臘優格。');else arr.push('💪 蛋白質進度不錯，接下來維持平均分配即可。');if(t.carbs>g.carbs*1.1)arr.push('🍚 碳水已超過目標，下一餐可減少飯、麵、麵包等主食份量。');else if(t.carbs<g.carbs*.45)arr.push('🍚 碳水目前較少，依活動量可加入適量全穀飯、地瓜或燕麥。');if(t.fat>g.fat*1.1)arr.push('🥑 脂肪偏高，今天可先減少油煎、炸物、濃醬與高脂肪零食。');if(state.water<g.water*.6)arr.push('💧 今天飲水還不夠，先補 250–500 ml，分次喝比一次大量喝更容易完成目標。');else if(state.water>=g.water)arr.push('💧 今日飲水目標已完成，保持穩定補水即可。');if(!arr.length)arr.push('🌿 今天的營養分布看起來穩定，繼續維持三餐均衡與適量活動。');box.innerHTML=arr.map(x=>`<div class="suggestion"><span class="dot">•</span><span>${x}</span></div>`).join('');document.getElementById('suggestionBadge').textContent=state.foods.length?'已更新':'待記錄'}
-
-const modal=document.getElementById('modal'), settingsModal=document.getElementById('settingsModal');
-document.getElementById('addFoodBtn').onclick=()=>{modal.classList.remove('hidden');document.getElementById('foodName').focus()};
-document.getElementById('closeModal').onclick=()=>modal.classList.add('hidden');
-document.getElementById('settingsBtn').onclick=()=>{const g=state.goals;goalCalories.value=g.calories;goalProtein.value=g.protein;goalCarbs.value=g.carbs;goalFat.value=g.fat;goalWater.value=g.water;settingsModal.classList.remove('hidden')};
-document.getElementById('closeSettings').onclick=()=>settingsModal.classList.add('hidden');
+function renderSuggestions(t,g,calc){const arr=[];if(t.protein<g.protein*.75)arr.push('🥚 蛋白質目前偏低，下一餐優先加入雞胸肉、魚、蛋、豆腐或希臘優格。');else arr.push('💪 蛋白質進度不錯，維持平均分配到三餐。');if(t.carbs>g.carbs*1.1)arr.push('🍚 碳水已超過目標，下一餐可減少飯、麵、麵包等主食。');else if(t.carbs<g.carbs*.45)arr.push('🍚 碳水較少，依活動量補適量全穀飯、地瓜或燕麥。');if(t.fat>g.fat*1.1)arr.push('🥑 脂肪偏高，今天先減少炸物、濃醬與高脂零食。');if(state.water<g.water*.6)arr.push('💧 今天飲水還不夠，先補 250–500 ml，分次喝。');else if(state.water>=g.water)arr.push('💧 今日飲水目標已完成。');arr.push(`🔥 你的 BMR 約 ${calc.bmr} kcal；依活動量推算 TDEE 約 ${calc.tdee} kcal。`);document.getElementById('suggestions').innerHTML=arr.map(x=>`<div class="suggestion"><span class="dot">•</span><span>${x}</span></div>`).join('');document.getElementById('suggestionBadge').textContent='已更新'}
+function renderProfile(calc){document.getElementById('profileSummary').innerHTML=`<div class="profile-stat"><b>${state.profile.height} cm</b><span>身高</span></div><div class="profile-stat"><b>${state.profile.weight} kg</b><span>體重</span></div><div class="profile-stat"><b>${calc.bmr}</b><span>BMR</span></div><div class="profile-stat"><b>${calc.tdee}</b><span>TDEE</span></div><div class="profile-stat"><b>${calc.target}</b><span>建議攝取</span></div>`;document.getElementById('exerciseSummary').textContent=`每週重訓 ${state.profile.weeklyStrength} 次・有氧 ${state.profile.weeklyCardio} 次・每次約 ${state.profile.cardioMinutes} 分鐘`}
+function renderCouple(){const box=document.getElementById('coupleSummary');if(!state.couple.enabled){box.innerHTML='<div class="couple-empty">尚未建立雙人協作。建立邀請碼後，另一半可加入同一個配對。</div>';return}const self=state.profile.name||'我';const partner=state.couple.partnerState;box.innerHTML=`<div class="couple-grid"><div><span>你</span><b>${esc(self)}</b><small>今日 ${Math.round(totals().calories)} kcal</small></div><div><span>另一半</span><b>${esc(state.couple.partnerName||'另一半')}</b><small>${partner?`今日 ${Math.round(totals(partner.foods||[]).calories)} kcal`:'尚未同步資料'}</small></div></div><div class="invite-row"><span>配對碼</span><strong>${esc(state.couple.inviteCode||'')}</strong></div>`}
+function openSettings(){const p=state.profile,g=state.goals;profileName.value=p.name;profileSex.value=p.sex;profileAge.value=p.age;profileHeight.value=p.height;profileWeight.value=p.weight;profileActivity.value=p.activity;profileGoal.value=p.goal;weeklyStrength.value=p.weeklyStrength;weeklyCardio.value=p.weeklyCardio;cardioMinutes.value=p.cardioMinutes;goalCalories.value=g.calories;goalProtein.value=g.protein;goalCarbs.value=g.carbs;goalFat.value=g.fat;goalWater.value=g.water;settingsModal.classList.remove('hidden')}
+const modal=document.getElementById('modal'),settingsModal=document.getElementById('settingsModal'),coupleModal=document.getElementById('coupleModal');
+document.getElementById('addFoodBtn').onclick=()=>{modal.classList.remove('hidden');foodName.focus()};document.getElementById('closeModal').onclick=()=>modal.classList.add('hidden');document.getElementById('settingsBtn').onclick=openSettings;document.getElementById('closeSettings').onclick=()=>settingsModal.classList.add('hidden');
 document.getElementById('foodForm').onsubmit=e=>{e.preventDefault();state.foods.push({id:crypto.randomUUID(),name:foodName.value,calories:+foodCalories.value,protein:+foodProtein.value,carbs:+foodCarbs.value,fat:+foodFat.value,note:foodNote.value});e.target.reset();modal.classList.add('hidden');save()};
-document.getElementById('settingsForm').onsubmit=e=>{e.preventDefault();state.goals={calories:+goalCalories.value,protein:+goalProtein.value,carbs:+goalCarbs.value,fat:+goalFat.value,water:+goalWater.value};settingsModal.classList.add('hidden');save()};
-document.querySelectorAll('[data-water]').forEach(b=>b.onclick=()=>{state.water+=+b.dataset.water;save()}); document.getElementById('waterUndo').onclick=()=>{state.water=Math.max(0,state.water-250);save()};
-
-document.getElementById('photoBtn').onclick=()=>document.getElementById('photoInput').click();
-document.getElementById('photoInput').onchange=e=>{const file=e.target.files[0];if(!file)return;const url=URL.createObjectURL(file);document.getElementById('photoPreview').src=url;document.getElementById('photoPreviewWrap').classList.remove('hidden');document.getElementById('photoResultTitle').textContent='照片已載入';document.getElementById('photoResultText').textContent='目前這個 GitHub Pages 版本會先展示照片並提供估算入口；請用「手動新增」確認食物與份量。之後可接 AI 視覺 API 自動辨識。'};
-
-document.getElementById('historyBtn').onclick=()=>alert('歷史紀錄功能可在下一版加入日曆、週／月趨勢與體重曲線。');document.getElementById('profileBtn').onclick=()=>settingsBtn.click();
-if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
-render();
+document.getElementById('settingsForm').onsubmit=e=>{e.preventDefault();state.profile={...state.profile,name:profileName.value,sex:profileSex.value,age:+profileAge.value,height:+profileHeight.value,weight:+profileWeight.value,activity:profileActivity.value,goal:profileGoal.value,weeklyStrength:+weeklyStrength.value,weeklyCardio:+weeklyCardio.value,cardioMinutes:+cardioMinutes.value};const calc=calcTDEE(state.profile);const auto=recommendedMacros(calc,state.profile);state.goals={calories:+goalCalories.value||auto.calories,protein:+goalProtein.value||auto.protein,carbs:+goalCarbs.value||auto.carbs,fat:+goalFat.value||auto.fat,water:+goalWater.value||auto.water};settingsModal.classList.add('hidden');save()};
+document.getElementById('autoGoalsBtn').onclick=()=>{const calc=calcTDEE(state.profile),a=recommendedMacros(calc,state.profile);goalCalories.value=a.calories;goalProtein.value=a.protein;goalCarbs.value=a.carbs;goalFat.value=a.fat;goalWater.value=a.water;};
+document.querySelectorAll('[data-water]').forEach(b=>b.onclick=()=>{state.water+=+b.dataset.water;save()});document.getElementById('waterUndo').onclick=()=>{state.water=Math.max(0,state.water-250);save()};
+document.getElementById('photoBtn').onclick=()=>photoInput.click();document.getElementById('photoInput').onchange=e=>{const file=e.target.files[0];if(!file)return;const url=URL.createObjectURL(file);photoPreview.src=url;photoPreviewWrap.classList.remove('hidden');photoResultTitle.textContent='照片已載入';photoResultText.textContent='目前為照片上傳＋人工確認模式；接入 AI 視覺 API 後可自動辨識食物與估算營養。'};
+document.getElementById('historyBtn').onclick=()=>alert('下一版可加入日曆、週／月趨勢、體重曲線與體脂追蹤。');document.getElementById('profileBtn').onclick=openSettings;document.getElementById('profileBtn2').onclick=openSettings;document.getElementById('coupleBtn2').onclick=()=>coupleModal.classList.remove('hidden');
+document.getElementById('coupleBtn').onclick=()=>coupleModal.classList.remove('hidden');document.getElementById('closeCouple').onclick=()=>coupleModal.classList.add('hidden');
+document.getElementById('generateInvite').onclick=()=>{state.couple.enabled=true;state.couple.inviteCode=Math.random().toString(36).slice(2,8).toUpperCase();save();alert(`你的配對碼：${state.couple.inviteCode}\n目前為本機示範模式；跨裝置同步需接 Firebase/Supabase。`)};
+document.getElementById('joinInvite').onclick=()=>{const code=prompt('請輸入另一半提供的配對碼');if(code){state.couple.enabled=true;state.couple.inviteCode=code.toUpperCase();state.couple.partnerName='另一半';save();alert('已加入配對。跨裝置資料同步需再設定雲端資料庫。')}};
+if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});render();
